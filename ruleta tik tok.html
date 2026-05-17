@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ruleta de Premios</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+}
+.header {
+    text-align: center;
+    margin-bottom: 12px;
+}
+.header h1 {
+    font-size: 1.6rem;
+    background: linear-gradient(90deg, #e94560, #feca57);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 800;
+}
+.header p {
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.5);
+    margin-top: 4px;
+}
+.wheel-wrapper {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    margin: 10px auto;
+    filter: drop-shadow(0 10px 30px rgba(0,0,0,0.5));
+}
+#canvas {
+    border-radius: 50%;
+    transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+    width: 300px;
+    height: 300px;
+}
+.pointer {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 30px;
+    height: 40px;
+    background: linear-gradient(180deg, #e94560 0%, #c23a51 100%);
+    clip-path: polygon(50% 100%, 0 0, 100% 0);
+    z-index: 10;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));
+}
+.center-dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 44px;
+    background: radial-gradient(circle, #fff 0%, #ddd 100%);
+    border-radius: 50%;
+    z-index: 10;
+    box-shadow: 0 0 15px rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+}
+.controls {
+    width: 100%;
+    max-width: 360px;
+    margin-top: 10px;
+}
+.input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+input {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 2px solid rgba(233, 69, 96, 0.4);
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.3s;
+}
+input:focus { border-color: #e94560; }
+input::placeholder { color: rgba(255,255,255,0.35); }
+.btn-add {
+    padding: 12px 18px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.btn-add:active { transform: scale(0.96); }
+.participants-box {
+    background: rgba(255,255,255,0.04);
+    border-radius: 16px;
+    padding: 14px;
+    border: 1px solid rgba(255,255,255,0.06);
+    max-height: 180px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+.participants-box h3 {
+    font-size: 0.85rem;
+    color: #feca57;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.empty-state {
+    text-align: center;
+    color: rgba(255,255,255,0.3);
+    padding: 20px;
+    font-size: 0.9rem;
+}
+.participant-chip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    animation: slideIn 0.25s ease;
+}
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+.btn-remove {
+    background: rgba(233, 69, 96, 0.2);
+    color: #e94560;
+    border: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-spin {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+    color: #fff;
+    font-size: 1.15rem;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 20px rgba(233, 69, 96, 0.3);
+    transition: all 0.2s;
+}
+.btn-spin:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+.btn-spin:not(:disabled):active { transform: scale(0.98); }
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.4);
+    padding: 0 4px;
+}
+.btn-clear {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-decoration: underline;
+}
+/* Modal ganador */
+.winner-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(8px);
+    padding: 20px;
+}
+.winner-overlay.active { display: flex; animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.winner-card {
+    background: linear-gradient(180deg, #1e1e3f 0%, #16213e 100%);
+    border: 2px solid #e94560;
+    border-radius: 24px;
+    padding: 40px 30px;
+    text-align: center;
+    width: 100%;
+    max-width: 320px;
+    box-shadow: 0 0 50px rgba(233, 69, 96, 0.25);
+    animation: popIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+@keyframes popIn {
+    from { transform: scale(0.6); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+.winner-card h2 {
+    font-size: 1.1rem;
+    color: #feca57;
+    margin-bottom: 16px;
+}
+.winner-name {
+    font-size: 2.2rem;
+    font-weight: 900;
+    background: linear-gradient(90deg, #e94560, #ff6b6b, #feca57);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 10px 0 20px;
+    line-height: 1.2;
+}
+.winner-card p {
+    color: rgba(255,255,255,0.6);
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+}
+.btn-close-modal {
+    padding: 14px 36px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+}
+/* Confetti */
+.confetti {
+    position: fixed;
+    width: 8px;
+    height: 8px;
+    top: -10px;
+    z-index: 999;
+    animation: confetti-fall linear forwards;
+    pointer-events: none;
+}
+@keyframes confetti-fall {
+    to { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🎰 Ruleta de Premios</h1>
+    <p>Agrega participantes y gira para elegir un ganador</p>
+</div>
+
+<div class="wheel-wrapper">
+    <div class="pointer"></div>
+    <canvas id="canvas" width="300" height="300"></canvas>
+    <div class="center-dot">⭐</div>
+</div>
+
+<div class="controls">
+    <div class="input-row">
+        <input type="text" id="nameInput" placeholder="Nombre..." onkeypress="if(event.key==='Enter') addParticipant()">
+        <button class="btn-add" onclick="addParticipant()">➕</button>
+    </div>
+
+    <div class="participants-box" id="participantsBox">
+        <h3>👥 Participantes</h3>
+        <div class="empty-state" id="emptyState">Sin participantes aún</div>
+    </div>
+
+    <button class="btn-spin" id="spinBtn" onclick="spin()" disabled>🎯 ¡GIRAR!</button>
+
+    <div class="stats-row">
+        <span>Total: <strong id="totalCount" style="color:#fff">0</strong></span>
+        <button class="btn-clear" onclick="clearAll()">Limpiar todo</button>
+    </div>
+</div>
+
+<div class="winner-overlay" id="winnerOverlay">
+    <div class="winner-card">
+        <h2>🎉 ¡TENEMOS GANADOR! 🎉</h2>
+        <div class="winner-name" id="winnerName">Nombre</div>
+        <p>¡Felicidades! Has sido seleccionado como ganador 🏆</p>
+        <button class="btn-close-modal" onclick="closeWinner()">¡Genial!</button>
+    </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// 🔧 CONFIGURACIÓN DEL TRUCO
+// Escribe EXACTAMENTE el nombre que debe ganar SIEMPRE.
+// Si agregan "@tonyfound", pon "@tonyfound" (igual, respetando mayúsculas/minúsculas).
+// Si quieres que sea insensible a mayúsculas, cambia la lógica de búsqueda abajo.
+// ════════════════════════════════════════════════════════════
+const GANADOR_FAVORITO = "@tonyfound";
+
+let participants = [];
+let currentRotation = 0;
+let isSpinning = false;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const colors = [
+    '#e94560', '#0f3460', '#feca57', '#48dbfb',
+    '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3',
+    '#ff9f43', '#ee5a24', '#009432', '#0652dd'
+];
+
+// Inicializar Telegram WebApp
+if (window.Telegram?.WebApp) {
+    Telegram.WebApp.expand();
+    Telegram.WebApp.ready();
+    Telegram.WebApp.enableClosingConfirmation();
+}
+
+function drawWheel() {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = canvas.width / 2 - 10;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (participants.length === 0) {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fill();
+        ctx.strokeStyle = '#e94560';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Agrega participantes', centerX, centerY - 6);
+        ctx.fillText('para comenzar', centerX, centerY + 14);
+        return;
+    }
+
+    const sliceAngle = (2 * Math.PI) / participants.length;
+
+    for (let i = 0; i < participants.length; i++) {
+        const startAngle = i * sliceAngle - Math.PI / 2;
+        const endAngle = (i + 1) * sliceAngle - Math.PI / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.fill();
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Texto
+        const textAngle = startAngle + sliceAngle / 2;
+        const textRadius = radius * 0.65;
+        const textX = centerX + Math.cos(textAngle) * textRadius;
+        const textY = centerY + Math.sin(textAngle) * textRadius;
+
+        ctx.save();
+        ctx.translate(textX, textY);
+        ctx.rotate(textAngle + Math.PI / 2);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        let name = participants[i];
+        if (name.length > 10) name = name.substring(0, 10) + '..';
+        ctx.fillText(name, 0, 0);
+        ctx.restore();
+    }
+
+    // Borde exterior dorado
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = '#feca57';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+}
+
+function addParticipant() {
+    const input = document.getElementById('nameInput');
+    const name = input.value.trim();
+
+    if (!name) {
+        shakeInput(input);
+        return;
+    }
+
+    if (participants.includes(name)) {
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+            Telegram.WebApp.HapticFeedback.notificationOccurred('error');
+        }
+        alert('Ese nombre ya está en la lista');
+        return;
+    }
+
+    participants.push(name);
+    input.value = '';
+    input.focus();
+    updateList();
+    drawWheel();
+    updateSpinButton();
+}
+
+function shakeInput(el) {
+    el.style.borderColor = '#ff4757';
+    setTimeout(() => el.style.borderColor = 'rgba(233, 69, 96, 0.4)', 500);
+}
+
+function removeParticipant(index) {
+    participants.splice(index, 1);
+    updateList();
+    drawWheel();
+    updateSpinButton();
+}
+
+function clearAll() {
+    if (participants.length === 0) return;
+    if (confirm('¿Eliminar todos los participantes?')) {
+        participants = [];
+        updateList();
+        drawWheel();
+        updateSpinButton();
+    }
+}
+
+function updateList() {
+    const box = document.getElementById('participantsBox');
+    const empty = document.getElementById('emptyState');
+    const total = document.getElementById('totalCount');
+
+    total.textContent = participants.length;
+
+    // Limpiar chips antiguos
+    const chips = box.querySelectorAll('.participant-chip');
+    chips.forEach(c => c.remove());
+
+    if (participants.length === 0) {
+        empty.style.display = 'block';
+    } else {
+        empty.style.display = 'none';
+        participants.forEach((name, index) => {
+            const chip = document.createElement('div');
+            chip.className = 'participant-chip';
+            chip.innerHTML = `<span>${name}</span><button class="btn-remove" onclick="removeParticipant(${index})">×</button>`;
+            box.appendChild(chip);
+        });
+    }
+}
+
+function updateSpinButton() {
+    const btn = document.getElementById('spinBtn');
+    btn.disabled = participants.length < 2 || isSpinning;
+    btn.textContent = isSpinning ? '🎲 Girando...' : '🎯 ¡GIRAR!';
+}
+
+function spin() {
+    if (isSpinning || participants.length < 2) return;
+
+    isSpinning = true;
+    updateSpinButton();
+
+    // ════════════════════════════════════════════════════════════
+    // 🎭 EL TRUCO
+    // Busca el índice exacto del favorito. Si existe, ese gana.
+    // Si no está, cae en el primero como fallback (para no quedar en blanco).
+    // ════════════════════════════════════════════════════════════
+    let winnerIndex = participants.indexOf(GANADOR_FAVORITO);
+    if (winnerIndex === -1) {
+        winnerIndex = 0; // Fallback si no lo escribieron igual
+    }
+
+    const sliceAngle = 360 / participants.length;
+
+    // Calcular ángulo para que el segmento winnerIndex quede arriba (270° / -90°)
+    // La ruleta gira en sentido horario (ángulo positivo).
+    // Centro del segmento i está en: -90 + i*slice + slice/2
+    // Queremos que después de girar, ese centro esté en 270° (arriba).
+    // Rotación necesaria = 270 - (centro actual) + vueltas extras
+    const centerCurrent = -90 + (winnerIndex * sliceAngle) + (sliceAngle / 2);
+    const targetRotation = 270 - centerCurrent;
+
+    // Añadir entre 5 y 8 vueltas completas aleatorias para efecto visual
+    const spins = (5 + Math.floor(Math.random() * 4)) * 360;
+    const finalRotation = currentRotation + spins + targetRotation - (currentRotation % 360);
+
+    currentRotation = finalRotation;
+    canvas.style.transform = `rotate(${finalRotation}deg)`;
+
+    // Haptic feedback al iniciar
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+        Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+    }
+
+    setTimeout(() => {
+        showWinner(participants[winnerIndex]);
+        isSpinning = false;
+        updateSpinButton();
+    }, 4000);
+}
+
+function showWinner(name) {
+    document.getElementById('winnerName').textContent = name;
+    document.getElementById('winnerOverlay').classList.add('active');
+    createConfetti();
+
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+        Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+    }
+}
+
+function closeWinner() {
+    document.getElementById('winnerOverlay').classList.remove('active');
+    document.querySelectorAll('.confetti').forEach(c => c.remove());
+}
+
+function createConfetti() {
+    const palette = ['#e94560', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff', '#00d2d3'];
+    for (let i = 0; i < 80; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.left = Math.random() * 100 + 'vw';
+        c.style.backgroundColor = palette[Math.floor(Math.random() * palette.length)];
+        c.style.animationDuration = (Math.random() * 2.5 + 2) + 's';
+        c.style.animationDelay = Math.random() * 1.5 + 's';
+        c.style.width = (Math.random() * 8 + 4) + 'px';
+        c.style.height = (Math.random() * 8 + 4) + 'px';
+        c.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+        document.body.appendChild(c);
+    }
+}
+
+// Inicializar
+drawWheel();
+updateSpinButton();
+</script>
+</body>
+</html>
